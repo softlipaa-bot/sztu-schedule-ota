@@ -1,0 +1,7 @@
+{
+  "versionCode": 43,
+  "versionName": "2.0.16",
+  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.16/sztu-schedule-latest.apk",
+  "force": false,
+  "changelog": "GitHub OTA; check update in About"
+}
