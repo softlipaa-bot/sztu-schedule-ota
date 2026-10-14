@@ -1,7 +1,7 @@
 {
-  "versionCode": 48,
-  "versionName": "2.0.21",
-  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.21/sztu-schedule-latest.apk",
+  "versionCode": 49,
+  "versionName": "2.0.22",
+  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.22/sztu-schedule-latest.apk",
   "force": false,
-  "changelog": "修复 OTA 卡在 0%（跟跳转+国内镜像）；浏览器下载兜底；单片机多段周次"
+  "changelog": "修复单片机多段周次（----- 后实验周丢失）；装后需重新同步课表"
 }
