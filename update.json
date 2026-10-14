@@ -1,7 +1,7 @@
 {
-  "versionCode": 43,
-  "versionName": "2.0.16",
-  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.16/sztu-schedule-latest.apk",
+  "versionCode": 45,
+  "versionName": "2.0.18",
+  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.18/sztu-schedule-latest.apk",
   "force": false,
-  "changelog": "GitHub OTA; check update in About"
+  "changelog": "fix widget: 补全 1-3节 11:00 等边界 + 今日课程时刻；今日页时钟刷新"
 }
