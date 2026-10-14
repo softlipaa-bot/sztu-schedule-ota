@@ -3,5 +3,5 @@
   "versionName": "2.0.21",
   "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.21/sztu-schedule-latest.apk",
   "force": false,
-  "changelog": "fix OTA: 跟跳转+国内镜像，避免卡在0%; 单片机多段周次"
+  "changelog": "修复 OTA 卡在 0%（跟跳转+国内镜像）；浏览器下载兜底；单片机多段周次"
 }
