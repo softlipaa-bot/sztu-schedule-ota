@@ -1,7 +1,7 @@
 {
-  "versionCode": 46,
-  "versionName": "2.0.19",
-  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.19/sztu-schedule-latest.apk",
+  "versionCode": 47,
+  "versionName": "2.0.20",
+  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.20/sztu-schedule-latest.apk",
   "force": false,
-  "changelog": "fix: 同格多段周次拆分(周三单片机 7,9,11...); 装后请重新同步课表"
+  "changelog": "fix: 周三单片机实验同格多段周次(不重复课名也能拆); 装后务必重新同步课表"
 }
