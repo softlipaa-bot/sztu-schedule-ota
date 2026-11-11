@@ -1,0 +1,1 @@
+https://raw.githubusercontent.com/softlipaa-bot/sztu-schedule-ota/main/update.json

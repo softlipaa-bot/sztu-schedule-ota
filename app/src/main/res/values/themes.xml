@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      应用外壳主题：窗口底色与系统栏都用浅色令牌（见 web/src/styles/tokens.css 的 page 变量）。
+      深色外观由 MainActivity 运行时按前端上报的 AppearanceStore 应用，
+      因此 Parent 固定 Light —— 系统深色时不会自动反色出「半浅半深」。
+    -->
+    <style name="Theme.SztuSchedule" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#F2F1F5</item>
+        <item name="android:navigationBarColor">#F2F1F5</item>
+        <item name="android:windowBackground">#F2F1F5</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <!--
+      自有原生弹窗（退出确认等）跟着「当前实际外观」，而不是系统深色：
+      用户显式选浅色时，系统深色也不能把弹窗变黑。代码按
+      AppearanceStore.isDark() 在下面两套主题之间选择。
+    -->
+    <style name="Theme.SztuSchedule.Dialog" parent="android:Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#087FFF</item>
+        <item name="android:textColorPrimary">#20232B</item>
+        <item name="android:textColorSecondary">#626674</item>
+        <item name="android:windowBackground">#FFFCFE</item>
+    </style>
+
+    <style name="Theme.SztuSchedule.Dialog.Dark" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#FF9E45</item>
+        <item name="android:textColorPrimary">#F5F1EC</item>
+        <item name="android:textColorSecondary">#BDAFA3</item>
+        <item name="android:windowBackground">#282420</item>
+    </style>
+</resources>

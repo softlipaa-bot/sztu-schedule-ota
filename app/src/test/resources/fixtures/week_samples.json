@@ -1,0 +1,24 @@
+{
+  "_comment": "周次匹配契约样本（报告 J09）。Kotlin ScheduleClock.matchWeek 与本文件一致；前端 web/src/App.vue 的 weekMatchOf 必须给出同样结果。expect: match|no|unknown",
+  "samples": [
+    { "weeks": "1-16", "week": 1, "expect": "match" },
+    { "weeks": "1-16", "week": 16, "expect": "match" },
+    { "weeks": "1-16", "week": 17, "expect": "no" },
+    { "weeks": "1-15单周", "week": 7, "expect": "match" },
+    { "weeks": "1-15单周", "week": 8, "expect": "no" },
+    { "weeks": "2-16双周", "week": 8, "expect": "match" },
+    { "weeks": "2-16双周", "week": 7, "expect": "no" },
+    { "weeks": "第7周,第9周,第11周", "week": 7, "expect": "match" },
+    { "weeks": "第7周,第9周,第11周", "week": 9, "expect": "match" },
+    { "weeks": "第7周,第9周,第11周", "week": 8, "expect": "no" },
+    { "weeks": "第7周,第9周,第11周", "week": 11, "expect": "match" },
+    { "weeks": "1-16周[01-02节]", "week": 8, "expect": "match" },
+    { "weeks": "1-6周[01-02节]", "week": 8, "expect": "no" },
+    { "weeks": "1-8,10-16", "week": 9, "expect": "no" },
+    { "weeks": "1-8,10-16", "week": 10, "expect": "match" },
+    { "weeks": "5-9周 星期三", "week": 6, "expect": "match" },
+    { "weeks": "", "week": 5, "expect": "unknown" },
+    { "weeks": "   ", "week": 5, "expect": "unknown" },
+    { "weeks": "实践周", "week": 5, "expect": "unknown" }
+  ]
+}

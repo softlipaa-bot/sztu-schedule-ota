@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  报告 J08：账户/会话属于凭证，不能随 allowBackup 被云备份或迁移到别的设备。
+  API 30 及以下使用本文件（android:fullBackupContent）。
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="sztu_schedule.xml" />
+    <exclude domain="sharedpref" path="sztu_calendar.xml" />
+    <exclude domain="sharedpref" path="sztu_hwsys.xml" />
+    <exclude domain="sharedpref" path="sztu_hwsys_attendance.xml" />
+    <exclude domain="file" path="hwsys_attendance" />
+    <exclude domain="file" path="duifenyi.ini" />
+    <exclude domain="file" path="schedule.json" />
+    <exclude domain="file" path="schedule.json.bak" />
+    <exclude domain="file" path="schedule.json.tmp" />
+</full-backup-content>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>SZTU教务</title>
+    <!--
+      首屏防止闪旧颜色：在样式表之前定 <html data-theme>。
+      与 src/lib/theme.ts 使用同一个存储键和同一套规则（system 才跟随系统）。
+    -->
+    <script>
+      (function () {
+        var theme = "light";
+        try {
+          var mode = window.localStorage.getItem("sztu_theme");
+          var sysDark =
+            !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var dark = mode === "dark" || ((mode === "system" || !mode) && sysDark);
+          theme = dark ? "dark" : "light";
+        } catch (e) {
+          theme = "light";
+        }
+        document.documentElement.dataset.theme = theme;
+        if (theme === "dark") document.documentElement.classList.add("dark");
+
+        // 安全区所有权：带原生桥时，系统栏/刘海避让完全由 MainActivity 负责，
+        // 网页侧 CSS 的 --safe-* 归零（否则两处都避让 → 首屏整体下移）。
+        // 独立浏览器没有 ScheduleBridge，仍使用真实 env()。
+        try {
+          if (window.ScheduleBridge && typeof window.ScheduleBridge.getState === "function") {
+            document.documentElement.dataset.nativeInsets = "1";
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-Cq3CnRzc.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/style-CPOSyYjM.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>

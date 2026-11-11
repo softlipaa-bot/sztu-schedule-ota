@@ -1,0 +1,12 @@
+{
+  "product": "sztu-schedule",
+  "package": "com.sztu.schedule",
+  "versionCode": 67,
+  "versionName": "2.2.1",
+  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.2.1/sztu-schedule-latest.apk",
+  "force": false,
+  "sizeBytes": 6385179,
+  "sha256": "5d6c97fa255e20501eef0e9109fe8091b269723d952306508141ba3281ee50d9",
+  "assetName": "sztu-schedule-latest.apk",
+  "changelog": "2.2.1：同步当前本地源码与最新签名 APK；课表、教学辅助出勤、小组件和外观功能。"
+}

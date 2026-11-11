@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">sztu.edu.cn</domain>
+        <domain includeSubdomains="true">jwxt.sztu.edu.cn</domain>
+        <domain includeSubdomains="true">auth.sztu.edu.cn</domain>
+    </domain-config>
+</network-security-config>

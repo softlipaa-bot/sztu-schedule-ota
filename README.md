@@ -1,113 +1,77 @@
-# 深技大课表 OTA / SZTU Schedule OTA
+# SZTU教务 / 深技大课表
 
-中文 | [English](#sztu-schedule-ota-english)
+当前公开源码版本：**2.2.1**。源码位于本仓库，安装包见 [Releases](https://github.com/softlipaa-bot/sztu-schedule-ota/releases)。
 
-面向 **深技大课表（SZTU Schedule）** Android 客户端的公开 OTA 发布仓库。模式与 CELLULAR‑Z 等 softlipaa‑bot OTA 仓库一致：清单在 `main`，安装包在 GitHub Release。
+## 构建
 
----
+安装 JDK 17+、Android SDK 和 Node.js。配置本机 `local.properties`，运行 `cd web`、`npm ci`、`npm run build`，回到根目录运行 `gradlew.bat assembleDebug`。
 
-## 项目简介
+## 发布说明
 
-深技大课表是面向深圳技术大学师生的课程表 Android 应用。本仓库**仅托管更新通道**，不包含应用业务源码：
+源码来自当前本地工作目录。个人账号数据、签名私钥、本机 SDK 路径、依赖缓存和历史安装包不随源码上传。第三方依赖遵循各自许可证。
 
-| 内容 | 说明 |
-|------|------|
-| `update.json` | 客户端检查更新时读取的版本清单 |
-| GitHub Releases | APK 安装包（如 `sztu-schedule-latest.apk`） |
+本次 Android 安装包是已签名的 Debug 构建，并非 Release 构建。
 
-清单地址（客户端写死或配置）：
+## 许可证
 
-```text
-https://raw.githubusercontent.com/softlipaa-bot/sztu-schedule-ota/main/update.json
+原创项目代码采用 [MIT License](LICENSE)。第三方代码、依赖及素材的原有权利和许可证继续适用。
+
+## 原项目说明
+
+# 深技大课表（SZTU教务）
+
+单页课表 App（官方 SSO 登录 → 网页爬取课表）+ 澎湃/红米桌面小部件。
+当前版本 **2.2.1（versionCode 67）**，UI 为 FlClash 风格的柔和卡片界面。
+
+2.2.1 修正出勤同步跑在主线程上、从而显示「获取失败」的问题。从出勤页同步时先登录教学辅助系统；教务和出勤一边失败不会清掉另一边。学期起止日期在你确认之前会标成待确认。
+
+## 功能
+- 统一认证登录（WebView，官方 SSO）
+- 解析教务课表页并本地缓存（原子写 + 备份兜底）
+- 登录与同步：教务课表和教学辅助出勤各自登录，成功后一起同步
+- 出勤记录：按学期查看，默认只看已确认缺勤
+- 桌面小部件：上节 / 这节 / 下节 + 今日时段
+- 课表背景图（相册选图 → 裁切 → 受限本地端点提供，卡片保持实色可读）
+- 教学楼地图（双指缩放 / 双击缩放）
+- 校历起点校准（影响今日页、周课表与小组件）
+- 在线更新（OTA manifest 带 sizeBytes / sha256 校验）
+- 浅色 / 深色 / 跟随系统三态外观，顶部按钮一点即浅↔深切换
+
+**自 2.1.0 起不再包含考勤（对分易）功能**：没有考勤 Tab、没有前台服务、没有 Python/Chaquopy 引擎，
+也不再声明前台服务 / 唤醒锁 / 通知权限。老版本升级上来时会在首次启动取消遗留的旧通知与通知渠道。
+
+## 构建 APK
+```bat
+REM 1) 先构建前端（输出到 app/src/main/assets/www）
+cd web && npm run build && cd ..
+
+REM 2) 再打包
+set ANDROID_HOME=D:\MovedFromC\AppDataLocal\Android\Sdk
+gradlew.bat assembleDebug
+```
+产物：`app\build\outputs\apk\debug\app-debug.apk`
+
+Kotlin 单测（中文路径下必须走这个入口）：
+```bat
+tools\run-kotlin-tests.bat
 ```
 
-## update.json 字段说明
-
-| 字段 | 说明 |
-|------|------|
-| `versionCode` | 整数；大于本地已装版本时提示更新 |
-| `versionName` | 版本名，如 `2.0.16` |
-| `apkUrl` | Release APK 直链 |
-| `force` | 是否强制更新 |
-| `changelog` | 更新日志文案 |
-
-当前清单示例结构：
-
-```json
-{
-  "versionCode": 43,
-  "versionName": "2.0.16",
-  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.0.16/sztu-schedule-latest.apk",
-  "force": false,
-  "changelog": "GitHub OTA; check update in About"
-}
+前端回归（需要 Python Playwright + 本机 Chrome，跑的是 APK 内真实资源 + 假原生桥）：
+```bat
+python -X utf8 tools\test-web-startup.py --apk <apk>
+python -X utf8 tools\test-web-ui.py      --apk <apk>
 ```
 
-## 如何发版
+## 红米 / 澎湃
+1. 安装 APK 后打开 App，在设置 → 关于 里点「检查更新」确认版本
+2. 手动添加小部件：桌面双指捏合 → 小部件 → 搜索「SZTU教务」
+3. 建议允许无限制电量、自启动，避免系统清理后台导致小部件不刷新
 
-1. 在应用工程中升高 `versionCode` / `versionName` 并打出 APK
-2. 本仓库新建 Release（标签如 `v2.0.16`），上传 `sztu-schedule-latest.apk`
-3. 提交并推送更新后的 `update.json` 到 `main`
-4. 打开课表 App → **关于**（或设置中的检查更新入口）→ 检查更新
+## 界面结构
+- 今日：主卡（真实上课状态 + 装饰性花形徽章）、状态条、本学期出勤摘要、今日课程列表
+- 课表：周课表（左右滑动换周）+ 周次导航 + 返回本周
+- 出勤：学期选择、查询范围、已确认缺勤和记录列表
+- 设置：登录与同步 / 外观 / 选择背景 / 教学楼地图 / 校历起点 / 关于
 
-## 设计约定
-
-- **公开仓库**：便于 raw.githubusercontent.com 直链拉取，无需鉴权
-- **清单与包分离**：`update.json` 轻量；大文件走 Release Assets
-- **versionCode 为准**：展示名可改，比较逻辑以整数版本码为准
-
-## 相关链接
-
-- 仓库：https://github.com/softlipaa-bot/sztu-schedule-ota
-- Releases：https://github.com/softlipaa-bot/sztu-schedule-ota/releases
-
----
-
-<a id="sztu-schedule-ota-english"></a>
-
-# SZTU Schedule OTA (English)
-
-Public **OTA distribution** repo for the **SZTU Schedule** Android app (Shenzhen Technology University course timetable). Same pattern as other softlipaa‑bot OTA repos: manifest on `main`, APK on GitHub Releases.
-
-## Overview
-
-This repository hosts **only the update channel**, not the app’s business source code:
-
-| Artifact | Role |
-|----------|------|
-| `update.json` | Version manifest fetched by the client |
-| GitHub Releases | APK packages (e.g. `sztu-schedule-latest.apk`) |
-
-Manifest URL:
-
-```text
-https://raw.githubusercontent.com/softlipaa-bot/sztu-schedule-ota/main/update.json
-```
-
-## Manifest fields
-
-| Field | Description |
-|-------|-------------|
-| `versionCode` | Integer; update prompts when remote > local |
-| `versionName` | Display version (e.g. `2.0.16`) |
-| `apkUrl` | Direct link to the Release APK |
-| `force` | Forced‑update flag |
-| `changelog` | Notes shown in the updater UI |
-
-## Publishing a release
-
-1. Bump versions in the app project and build the APK
-2. Create a Release here (tag e.g. `v2.0.16`) and upload `sztu-schedule-latest.apk`
-3. Push an updated `update.json` to `main`
-4. In the app: **About** (or Check for updates) → verify the new build
-
-## Conventions
-
-- Public repo for unauthenticated raw GitHub fetches
-- Small JSON manifest; large binaries on Release assets
-- `versionCode` is the source of truth for comparisons
-
-## Links
-
-- Repository: https://github.com/softlipaa-bot/sztu-schedule-ota
-- Releases: https://github.com/softlipaa-bot/sztu-schedule-ota/releases
+宽屏（≥1000px）使用左侧栏 + 两栏内容；手机使用浮动 Dock（今日 / 课表 / 出勤）。
+设计令牌集中在 `web/src/styles/tokens.css`，组件样式在 `web/src/styles/app.css`。

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SZTU教务</string>
+    <string name="widget_name">SZTU教务</string>
+    <string name="widget_description">今日上节 / 这节 / 下节与全天课表（点刷新才更新）</string>
+</resources>
