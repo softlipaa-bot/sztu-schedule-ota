@@ -377,7 +377,8 @@ a:focus-visible,
 
 .today-pane,
 .schedule-pane,
-.attendance-pane {
+.attendance-pane,
+.duifene-pane {
   position: absolute;
   inset: 0;
   display: flex;
@@ -829,8 +830,7 @@ a:focus-visible,
 }
 
 .att-summary-kicker,
-.att-summary-meta,
-.att-summary-pending {
+.att-summary-meta {
   color: var(--text-2);
   font-size: var(--fs-small);
 }
@@ -912,6 +912,27 @@ a:focus-visible,
   grid-column: 1 / -1;
 }
 
+.att-pager {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.att-page-count {
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+
+.att-paged-list {
+  flex: none;
+  max-height: min(55vh, 32rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
 .att-card .att-name {
   white-space: nowrap;
 }
@@ -919,10 +940,6 @@ a:focus-visible,
 .att-card.open .att-name,
 .att-detail {
   white-space: pre-wrap;
-}
-
-.att-empty .btn {
-  margin-top: 8px;
 }
 
 /* ---------- 空态 / 加载 / 错误 ---------- */
@@ -1225,8 +1242,8 @@ a:focus-visible,
   bottom: calc(14px + var(--safe-bottom));
   z-index: 6;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  width: min(420px, calc(100% - 32px));
+  grid-template-columns: repeat(4, 1fr);
+  width: min(440px, calc(100% - 24px));
   padding: 6px;
   border-radius: var(--r-pill);
   background: color-mix(in oklab, var(--card) 92%, transparent);
@@ -1240,7 +1257,7 @@ a:focus-visible,
   top: 6px;
   bottom: 6px;
   left: 6px;
-  width: calc((100% - 12px) / 3);
+  width: calc((100% - 12px) / 4);
   border-radius: var(--r-pill);
   background: var(--primary-soft);
   transform: translateX(0);
@@ -1256,18 +1273,26 @@ a:focus-visible,
   transform: translateX(200%);
 }
 
+.dock[data-index="3"] .dock-capsule {
+  transform: translateX(300%);
+}
+
 .dock-tab {
   position: relative;
   z-index: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  min-height: var(--tap);
+  gap: 1px;
+  min-height: 52px;
+  padding: 4px 0;
   border-radius: var(--r-pill);
   color: var(--text-2);
-  font-size: var(--fs-small);
+  font-size: 11px;
   font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
   transition: color 160ms var(--ease);
 }
 
@@ -1653,6 +1678,212 @@ a:focus-visible,
 
 .btn-plain {
   background: var(--block);
+  color: var(--text);
+}
+
+.duifene-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px var(--page-pad) calc(108px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+}
+
+.df-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.df-courses,
+.df-records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.df-picker {
+  display: flex;
+  flex-direction: column;
+}
+
+.df-course-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 12px;
+  border-radius: var(--r-md);
+  background: var(--block);
+  color: var(--text);
+  text-align: left;
+}
+
+.df-course-trigger:disabled {
+  opacity: 0.55;
+}
+
+.df-course-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.df-course-kicker,
+.df-course-hint {
+  font-size: var(--fs-small);
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.df-course-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.df-chevron {
+  flex: none;
+  color: var(--text-2);
+  transition: transform 180ms var(--ease);
+}
+
+.df-chevron.open {
+  transform: rotate(180deg);
+}
+
+.df-course-clip {
+  overflow: hidden;
+  height: 0;
+  transition: height 220ms var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .df-course-clip,
+  .df-chevron {
+    transition: none;
+  }
+}
+
+.df-course-list {
+  max-height: min(280px, 40dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.df-course {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--block);
+  color: var(--text);
+  text-align: left;
+  font-weight: 700;
+}
+
+.df-check-mark {
+  width: 1.1em;
+  flex: none;
+  color: var(--primary-text);
+}
+
+.df-text-btn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  color: var(--text-2);
+  font-size: var(--fs-small);
+  font-weight: 700;
+}
+
+.df-text-btn:disabled {
+  opacity: 0.4;
+}
+
+.df-record {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: baseline;
+  min-height: 44px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.df-record-time,
+.df-record-phase {
+  font-size: var(--fs-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.df-record-phase {
+  color: var(--text-2);
+}
+
+.df-record-course {
+  min-width: 0;
+  font-weight: 700;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.df-course.active {
+  background: var(--primary-soft);
+  color: var(--primary-text);
+}
+
+.df-course:disabled {
+  opacity: 0.55;
+}
+
+.df-phase {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.df-phase[data-phase="success"],
+.df-phase[data-phase="already"] {
+  color: var(--success);
+}
+
+.df-phase[data-phase="failed"],
+.df-phase[data-phase="expired"],
+.df-phase[data-phase="voided"] {
+  color: var(--danger);
+}
+
+.df-phase[data-phase="waiting_material"],
+.df-phase[data-phase="waiting_condition"],
+.df-phase[data-phase="pending_confirm"] {
+  color: var(--warn);
+}
+
+.df-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  font-size: var(--fs-body);
   color: var(--text);
 }
 

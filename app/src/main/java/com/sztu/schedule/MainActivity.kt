@@ -3,9 +3,11 @@ package com.sztu.schedule
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -51,6 +53,8 @@ import com.sztu.schedule.data.hwsys.SyncText
 import com.sztu.schedule.data.hwsys.claimSync
 import com.sztu.schedule.data.hwsys.releaseSync
 import com.sztu.schedule.data.hwsys.runUnified
+import com.sztu.schedule.duifene.DuifeneJsBridge
+import com.sztu.schedule.duifene.DuifeneRuntime
 import com.sztu.schedule.login.HwsysLoginActivity
 import com.sztu.schedule.login.LoginActivity
 import com.sztu.schedule.widget.ScheduleWidgetUpdater
@@ -72,6 +76,22 @@ class MainActivity : ComponentActivity() {
     private lateinit var progress: ProgressBar
     private lateinit var errorView: TextView
     private var syncing = false
+    private var pendingDuifeneStart = false
+    private val duifenePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) {
+        if (!pendingDuifeneStart) return@registerForActivityResult
+        pendingDuifeneStart = false
+        DuifeneRuntime.get().startWatch()
+    }
+    private val duifeneListener: (String) -> Unit = { json ->
+        if (::webView.isInitialized) {
+            val quoted = JSONObject.quote(json)
+            webView.post {
+                webView.evaluateJavascript("window.onDuifeneState && window.onDuifeneState($quoted)", null)
+            }
+        }
+    }
 
     /**
      * 系统栏后面的实际容器。系统栏是透明的，切深浅色时必须同时改它的底色，
@@ -290,6 +310,8 @@ class MainActivity : ComponentActivity() {
             }
         }
         webView.addJavascriptInterface(Bridge(), "ScheduleBridge")
+        webView.addJavascriptInterface(DuifeneJsBridge(this), "DuifeneBridge")
+        DuifeneRuntime.get().addListener(duifeneListener)
 
         // https domain required for ES modules; served from android_asset/www via AssetLoader
         webView.loadUrl("https://appassets.androidplatform.net/assets/www/index.html")
@@ -403,6 +425,16 @@ class MainActivity : ComponentActivity() {
             .show()
     }
 
+    override fun onStart() {
+        super.onStart()
+        DuifeneRuntime.peek()?.setUiVisible(true)
+    }
+
+    override fun onStop() {
+        DuifeneRuntime.peek()?.setUiVisible(false)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         // 本地重算今日上节/这节/下节（不强制联网）；避免小组件跨日卡住
@@ -410,6 +442,7 @@ class MainActivity : ComponentActivity() {
         if (::webView.isInitialized) {
             pushState()
             pushAttendance()
+            pushDuifene()
             pushOtaState()
             pushSystemTheme()
         }
@@ -418,7 +451,37 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         OtaUpdater.removeListener(otaListener)
+        DuifeneRuntime.peek()?.removeListener(duifeneListener)
         super.onDestroy()
+    }
+
+    internal fun beginDuifeneWatch() {
+        val needed = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            needed += android.Manifest.permission.POST_NOTIFICATIONS
+        }
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.ACCESS_FINE_LOCATION
+        }
+        if (checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            needed += android.Manifest.permission.ACCESS_COARSE_LOCATION
+        }
+        if (needed.isEmpty()) {
+            DuifeneRuntime.get().startWatch()
+        } else {
+            pendingDuifeneStart = true
+            duifenePermissionLauncher.launch(needed.toTypedArray())
+        }
+    }
+
+    private fun pushDuifene() {
+        if (!::webView.isInitialized) return
+        val json = JSONObject.quote(DuifeneRuntime.get().snapshotJson())
+        webView.post {
+            webView.evaluateJavascript("window.onDuifeneState && window.onDuifeneState($json)", null)
+        }
     }
 
     private fun pushOtaState() {
@@ -599,7 +662,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun syncScheduleOnce(): Pair<Boolean, String> {
-        val result = scrapeInBackground()
+        val result = ScheduleScraper.scrape(this)
         return result.fold(
             onSuccess = {
                 lastSyncError = ""
@@ -612,12 +675,6 @@ class MainActivity : ComponentActivity() {
                 false to "课表同步失败：$message"
             }
         )
-    }
-
-    private suspend fun scrapeInBackground() = suspendCancellableCoroutine { cont ->
-        ScheduleScraper.scrape(this@MainActivity) { result ->
-            if (cont.isActive) cont.resume(result)
-        }
     }
 
     inner class Bridge {

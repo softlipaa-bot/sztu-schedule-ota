@@ -1,0 +1,12 @@
+对分易签到逻辑移植自 bytehola/duifene_auto_sign
+commit ce1608e492949e34c2239a7d442dc4fde207dd9b
+仓库说明该项目以 MIT License 发布；该提交未附带独立 LICENSE 文件。
+
+原作者：bytehola
+来源：https://github.com/bytehola/duifene_auto_sign
+
+本应用只移植学生身份的接口、材料校验和监听调度，并保留上述来源。
+定位提交改为用户授权后的设备真实位置，不使用上游的教室坐标随机偏移。
+二维码解码使用 ZXing Java core 3.5.3（Apache License 2.0），不使用上游的 Python zxing-cpp / Pillow。
+
+未把移植代码重新署名为本应用作者。

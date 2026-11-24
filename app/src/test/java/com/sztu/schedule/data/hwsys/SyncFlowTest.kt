@@ -89,6 +89,28 @@ class SyncFlowTest {
     }
 
     @Test
+    fun expiredScheduleSessionPromptsOnceAndRetries() = runBlocking {
+        var prompts = 0
+        var queries = 0
+        val report = runUnified(
+            SyncOrigin.FULL,
+            hooks(
+                jwxtReady = true,
+                promptJwxt = { prompts += 1; true },
+                schedule = {
+                    queries += 1
+                    if (queries == 1) false to "课表同步失败：会话已过期，请重新登录" else true to ""
+                },
+                attendance = { FetchOutcome.Success(sampleCache()) },
+            ),
+        )
+        assertEquals(1, prompts)
+        assertEquals(2, queries)
+        assertTrue(report.schedule.ok)
+        assertTrue(report.attendance.ok)
+    }
+
+    @Test
     fun expiredAttendancePromptsOnceThenRetries() = runBlocking {
         var prompts = 0
         var queries = 0

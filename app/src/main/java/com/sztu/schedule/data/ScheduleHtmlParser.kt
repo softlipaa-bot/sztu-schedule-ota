@@ -51,6 +51,11 @@ object ScheduleHtmlParser {
         )
     }
 
+    fun hasTimetable(html: String): Boolean {
+        val doc = Jsoup.parse(html)
+        return findScheduleTable(doc) != null || doc.selectFirst(".kbcontent") != null
+    }
+
     private fun findScheduleTable(doc: org.jsoup.nodes.Document): Element? {
         doc.selectFirst("#timetable")?.let { return it }
         doc.selectFirst("table.timetable, table#kbtable")?.let { return it }

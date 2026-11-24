@@ -11,8 +11,8 @@ android {
         applicationId = "com.sztu.schedule"
         minSdk = 26
         targetSdk = 36
-        versionCode = 67
-        versionName = "2.2.1"
+        versionCode = 70
+        versionName = "2.3.2"
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -59,6 +59,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.12.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jsoup:jsoup:1.18.3")
+    implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.jsoup:jsoup:1.18.3")

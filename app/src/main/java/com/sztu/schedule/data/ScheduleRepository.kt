@@ -7,16 +7,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import org.jsoup.Jsoup
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Calendar
 
 object JwxtUrls {
     const val SSO =
         "https://auth.sztu.edu.cn/idp/authcenter/ActionAuthChain?entityId=jiaowu"
     const val SCHEDULE = "https://jwxt.sztu.edu.cn/jsxsd/xskb/xskb_list.do"
-    const val MAIN = "https://jwxt.sztu.edu.cn/jsxsd/framework/xsMain.jsp"
+
+    fun isSignInPage(url: String): Boolean = when (CookieJar.hostOf(url)) {
+        CookieJar.HOST_AUTH -> true
+        CookieJar.HOST_JWXT -> {
+            val path = CookieJar.pathOf(url)
+            path.equals("/Logon.do", ignoreCase = true) ||
+                path.contains("/LoginToXk", ignoreCase = true)
+        }
+        else -> false
+    }
 }
 
 class ScheduleRepository(private val context: Context) {
@@ -182,7 +190,7 @@ class ScheduleRepository(private val context: Context) {
     }
 
     /** 原子写入：临时文件 → 备份旧文件 → 重命名替换（报告 J06）。 */
-    fun save(snapshot: ScheduleSnapshot) {
+    private fun save(snapshot: ScheduleSnapshot) {
         val text = snapshot.toJson().toString()
         try {
             tmpFile.writeText(text)
@@ -196,12 +204,14 @@ class ScheduleRepository(private val context: Context) {
         } finally {
             if (tmpFile.exists()) tmpFile.delete()
         }
-        _snapshot.value = snapshot
         prefs.edit()
             .putBoolean("needs_resync", false)
+            .putBoolean("empty_term", snapshot.courses.isEmpty())
+            .putLong("session_verified_at", System.currentTimeMillis())
             .putLong("last_saved_at", System.currentTimeMillis())
             .apply()
         markLoggedIn()
+        _snapshot.value = snapshot
     }
 
     fun reloadFromDisk(): ScheduleSnapshot {
@@ -210,56 +220,19 @@ class ScheduleRepository(private val context: Context) {
         return s
     }
 
-    suspend fun refreshFromJwxt(): Result<ScheduleSnapshot> = withContext(Dispatchers.IO) {
-        try {
-            persistWebViewCookies()
-            val cookie = cookieFor(JwxtUrls.SCHEDULE)
-            if (!CookieJar.hasSessionId(cookie)) {
-                return@withContext Result.failure(IllegalStateException("教务未登录，请先官方登录"))
-            }
-            val html = fetch(JwxtUrls.SCHEDULE, cookie)
-            if (looksLikeLoginPage(html)) {
-                return@withContext Result.failure(IllegalStateException("会话已过期，请重新登录"))
-            }
-            if (!looksLikeTimetablePage(html)) {
-                // 结构变化 ≠ 空学期；保留旧课表，明确提示而不是把缓存清空（报告 J06）
-                prefs.edit().putBoolean("needs_resync", true).apply()
-                return@withContext Result.failure(
-                    IllegalStateException("教务页面结构有变化，暂时无法解析；已保留上次课表")
-                )
-            }
-            val parsed = ScheduleHtmlParser.parse(html)
-            val emptyTerm = parsed.courses.isEmpty()
-            // 有课表容器但 0 门课 = 正常空学期，必须能保存并显示为空（报告 J06）
-            save(parsed)
-            prefs.edit()
-                .putBoolean("empty_term", emptyTerm)
-                .putLong("session_verified_at", System.currentTimeMillis())
-                .apply()
-            Result.success(parsed)
-        } catch (e: Exception) {
-            Result.failure(e)
-        }
+    fun markSessionExpired() {
+        prefs.edit().remove("session_verified_at").apply()
     }
 
-    private fun fetch(url: String, cookie: String): String {
-        val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 25000
-            readTimeout = 25000
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            setRequestProperty("Cookie", cookie)
-            setRequestProperty(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-            )
-            setRequestProperty("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-            setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
-            setRequestProperty("Referer", JwxtUrls.MAIN)
+    suspend fun saveTimetablePage(html: String): ScheduleSnapshot = withContext(Dispatchers.IO) {
+        val parsed = ScheduleHtmlParser.parse(html)
+        if (parsed.courses.isEmpty() && !looksLikeTimetablePage(html)) {
+            prefs.edit().putBoolean("needs_resync", true).apply()
+            throw IllegalStateException("教务页面结构有变化，暂时无法解析，已保留本地课表缓存")
         }
-        val code = conn.responseCode
-        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-        return stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+        persistWebViewCookies()
+        save(parsed)
+        parsed
     }
 
     companion object {
@@ -289,42 +262,14 @@ class ScheduleRepository(private val context: Context) {
         }
 
         /** 页面里是否有课表容器：用于区分「正常空学期」和「页面结构变了」。 */
-        fun looksLikeTimetablePage(html: String): Boolean {
-            if (html.isBlank()) return false
-            return html.contains("id=\"timetable\"", ignoreCase = true) ||
-                html.contains("id='timetable'", ignoreCase = true) ||
-                html.contains("class=\"kbcontent", ignoreCase = true) ||
-                html.contains("学期理论课表") ||
-                html.contains("xskb_list")
-        }
+        fun looksLikeTimetablePage(html: String): Boolean = ScheduleHtmlParser.hasTimetable(html)
 
-        /**
-         * 更严格的登录页判断，避免课表页脚本里出现 userAccount 等字样被误判为过期。
-         */
         fun looksLikeLoginPage(html: String): Boolean {
-            if (html.isBlank()) return true
-            // 正特征：课表页
-            if (html.contains("id=\"timetable\"", ignoreCase = true) ||
-                html.contains("id='timetable'", ignoreCase = true) ||
-                html.contains("kbcontent", ignoreCase = true) ||
-                html.contains("班级课表") ||
-                html.contains("学期理论课表") ||
-                html.contains("xskb_list")
-            ) {
-                return false
-            }
-            val hasAccountField =
-                html.contains("id=\"userAccount\"", ignoreCase = true) ||
-                    html.contains("name=\"userAccount\"", ignoreCase = true) ||
-                    html.contains("id='userAccount'", ignoreCase = true)
-            val hasPassword =
-                html.contains("type=\"password\"", ignoreCase = true) ||
-                    html.contains("type='password'", ignoreCase = true)
-            if (hasAccountField && hasPassword) return true
-            if (html.contains("ActionAuthChain") && hasPassword) return true
-            if (html.contains("统一身份认证") && hasPassword) return true
-            if (html.contains("LoginToXk", ignoreCase = true) && hasPassword) return true
-            return false
+            val page = Jsoup.parse(html)
+            return page.selectFirst("input[type=password]") != null &&
+                (page.selectFirst("input#userAccount, input[name=userAccount]") != null ||
+                    page.text().contains("统一身份认证") ||
+                    page.selectFirst("form[action*=ActionAuthChain], form[action*=LoginToXk]") != null)
         }
     }
 }

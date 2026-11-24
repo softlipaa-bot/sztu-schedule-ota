@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import com.sztu.schedule.duifene.DuifeneRuntime
 import com.sztu.schedule.widget.ScheduleWidgetUpdater
 import com.sztu.schedule.widget.WidgetRefreshScheduler
 
@@ -18,6 +19,7 @@ class ScheduleApp : Application() {
         } catch (_: Exception) {
         }
         LegacyAttendanceCleanup.runOnce(this)
+        DuifeneRuntime.install(this)
     }
 }
 

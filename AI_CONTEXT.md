@@ -8,7 +8,7 @@
 - **App name (strings):** `SZTU教务` / widget same
 - **applicationId:** `com.sztu.schedule`
 - **namespace:** `com.sztu.schedule`
-- **versionName:** `2.2.1` (versionCode 67)
+- **versionName:** `2.3.2` (versionCode 70)
 - **Purpose:** Shenzhen Technology University (SZTU) academic schedule via **official SSO → jwxt HTML scrape**, local cache, HyperOS/MIUI home-screen widget, keep-alive for widget refresh.
 - **NOT this app:** Electron 考勤 (`SZTU考勤系统`), Flet 签到助手, 连点助手.
 
@@ -43,6 +43,7 @@ SZTU教务/
       ScheduleApp.kt               # 小组件闹钟 + 遗留考勤通知清理
       CropBackgroundActivity.kt    # 自有裁切页（主题跟随 AppearanceStore）
       OtaUpdater.kt
+      duifene/ 对分易会话、监听、前台服务（与出勤分开）
       data/  ScheduleRepository / ScheduleHtmlParser / ScheduleScraper / Models
              TeachingWeek / CookieJar / SecretStore / BackgroundStore
              BackgroundImageEndpoint / AppearanceStore
@@ -78,9 +79,25 @@ APK: `app\build\outputs\apk\debug\app-debug.apk`
 2. Widget shows 上节/这节/下节. Refresh sources: user button, `MainActivity.onResume`, `ScheduleApp` start, **section-boundary AlarmManager** (`WidgetRefreshScheduler`), boot/time receivers. Do not remove the scheduler — `updatePeriodMillis=0` alone will freeze slots. Boundaries must include **all** `SectionTimes` starts/ends (esp. `1-3` → **11:00**) **plus today's course times**; old hard-coded list missed 11:00 and left Wednesday morning 单片机 stuck as「这节」until 11:40.
 3. Parser targets `#timetable` / `.kbcontent` (skip `.kbcontent1`); tooltip title supplies classroom.
 
-## 考勤（对分易）已于 2.1.0 整体移除
+## 对分易（2.3.0 起重新作为独立模块）
 
-用户 2026-10-31 授权：取消考勤 Tab 与全部内容。**不要恢复或部分恢复**：
+2026-11-11 用户授权新增独立「对分易」Tab，覆盖本节旧的“不得恢复”约束，**只针对这个模块**。
+出勤 Tab 仍是 ACM 教学辅助系统，不能改名、不能共用账号、记录或同步状态。首页不得放对分易卡片、按钮、红点或运行提示。
+
+- 参考实现：`bytehola/duifene_auto_sign` commit `ce1608e492949e34c2239a7d442dc4fde207dd9b`（README 声明 MIT；该提交没有独立 LICENSE 文件）。说明见 `third_party/duifene_auto_sign.NOTICE`。
+- 代码在 `com.sztu.schedule.duifene`。Kotlin 移植，不要再引入 Chaquopy、Python、pywebview 或在网页 JS 里直接请求对分易。
+- 发现链路只用当前学生的 `GetStudentInLogList` + `GetCheckIn`。不要把 `GetModelByInProgress` 接回监听。
+- 数字码保持字符串和前导零。二维码只接受 `https://www.duifene.com/G.aspx?OnlyId=2&e=` 加 48 位十六进制，不打开二维码里的链接。解码依赖 `com.google.zxing:core:3.5.3`。
+- 活动发现间隔默认 3–5 秒。只有缺数字码时才按 0.2 秒取材料；失败退避 0.4/0.8/1.6/2 秒。截止前 5 秒优先取码。不要把所有接口改成 0.2 秒轮询。
+- 定位签到只用用户授权后的设备位置。不要恢复上游的教室坐标随机偏移，取不到有效定位时不能报成功。
+- 凭证在 prefs `sztu_duifene`，经 `SecretStore` 封装，并已排除备份。保存密码必须由用户勾选。网页 Cookie 只留在内存。失败不能清除教务 Cookie 或 ACM Token。
+- 监听由用户开始，默认最长 120 分钟，前台服务类型 `dataSync`，有定位权限时同时带 `location`。通知渠道 `sztu_duifene_listen`，通知 id `2102`。不要复用旧渠道 `sztu_watch` / id `1001`。不要开机自启，不要静默复活。
+- `dataSync` 必须在 `Service.onTimeout` 里停止。这不是全天在线保证。
+- 还没有用真实账号对真实课程提交。离线测试通过不等于平台验证通过。
+
+## 2.1.0 曾整体移除对分易，旧清理仍然保留
+
+用户 2026-10-31 曾授权取消当时的考勤 Tab。下面这些清理针对 **2.0.x 的旧通知**，新模块不要复用它们的 id：
 
 - 已删除：`duifene/`（AttendanceCoordinator / DuifeneJsBridge / DuifeneRuntime / WatchForegroundService / WatchSession）、
   `app/src/main/python/`（含 duifene_core / bridge / android_entry / attendance_* / headless_shim）、
@@ -199,7 +216,7 @@ APK: `app\build\outputs\apk\debug\app-debug.apk`
 
 ## 出勤查询（2.2.0，用户已授权）
 
-只读接入教学辅助系统 `https://acm.sztu.edu.cn:40130/hwsys`。**不要恢复对分易、签到、定位、监听、邮件、Python 或前台服务。**
+只读接入教学辅助系统 `https://acm.sztu.edu.cn:40130/hwsys`。这是「出勤」，和对分易分开。不要把对分易登录、签到或监听并进这里，也不要恢复 Python。
 
 - 2026-11-09 核对过的线上事实：`GET /api/signin_my_attendance?query={"param":{"date_start","date_end"}}`，未登录实响应 `{"status_code":401,"detail":"请先登录","data":null}`。官网状态是 0 未签、10 已签、20 请假、30 免听、40 迟到。页面没有「缺勤」这个词。
 - 「已确认缺勤」只统计：状态 0、有稳定记录 ID、且 `time_end` 按 Asia/Shanghai 严格早于现在。窗口未结束、没有结束时间、状态缺失、没有 ID、请求失败，都不算缺勤。
@@ -211,7 +228,7 @@ APK: `app\build\outputs\apk\debug\app-debug.apk`
 
 ## 导航布局（2.2.0）
 
-- 主 tab 是 **今日 / 课表 / 出勤**。设置仍由齿轮进入。首页状态条上的「去登录 / 重新同步」继续保持 `HOME_BANNER_ACTIONS = false`。
+- 主 tab 是 **今日 / 课表 / 出勤 / 对分易**。设置仍由齿轮进入。首页状态条上的「去登录 / 重新同步」继续保持 `HOME_BANNER_ACTIONS = false`。手机 Dock 是上图标下短标签，胶囊按 4 列计算。
 - 手机：浮动 Dock（图标 + 标签 + 独立滑动胶囊），快速连点以最后一次为准（不锁操作）。
 - 宽屏 ≥1000px：左侧栏（216px）+ 两栏内容；**两套导航不会同时在 DOM**（`isWide` 用 `matchMedia` 驱动 `v-if`）。
 - 非激活页 `.tab-pane-host` 必须同时有 `aria-hidden="true"` 与 `inert`（隐藏页不能仍被 Tab 聚焦）。
@@ -223,8 +240,8 @@ APK: `app\build\outputs\apk\debug\app-debug.apk`
 ## Kotlin 单元测试入口（重要）
 
 - **不要**在中文路径下直接跑 `gradlew testDebugUnitTest`：Gradle 的 unit-test worker 会 `ClassNotFoundException`（同一 classpath 手动 `java -cp` 跑 JUnit 正常，属 Gradle + 非 ASCII 路径问题）。
-- 用 `tools\run-kotlin-tests.bat`：它把项目临时映射到 ASCII 盘符（T..Z）再跑测试，结束后自动卸载映射。当前基线：**90 项** Kotlin 测试全绿
-  （`AttendanceLogicTest` 21 + `SyncFlowTest` 10 + `CookieJarTest` 19 + `ScheduleClockTest` 14 + `TeachingWeekTest` 9 +
+- 用 `tools\run-kotlin-tests.bat`：它把项目临时映射到 ASCII 盘符（T..Z）再跑测试，结束后自动卸载映射。当前基线：**127 项** Kotlin 测试全绿
+  （`DuifeneFixTest` 9 + `DuifeneCoreTest` 28 + `AttendanceLogicTest` 21 + `SyncFlowTest` 10 + `CookieJarTest` 19 + `ScheduleClockTest` 14 + `TeachingWeekTest` 9 +
   `BackgroundImageEndpointTest` 8 + `SectionTimesTest` 4 + `ScheduleHtmlParserTest` 2 + `WeekContractTest` 2 +
   `UnitTestSmokeTest` 1）。
 - `ScheduleClockTest.real_fixture_course_boundaries_0830_to_0955` 锁定真实课程边界：08:29 不算上课、08:30 算、
@@ -267,5 +284,6 @@ APK: `app\build\outputs\apk\debug\app-debug.apk`
 - Point this app at Electron `persist:jwxt` storage.
 - Replace SSO URL entityId without verifying jwxt still accepts `entityId=jiaowu`.
 - Commit secrets / `local.properties` SDK paths as universal truth (machine-specific).
-- 恢复考勤功能、前台服务、通知权限或 Chaquopy（见上文移除记录）。
+- 把对分易和出勤、教务会话混用，或在首页加入对分易入口。
+- 重新引入 Chaquopy / Python。
 - 为动画或主题切换增加业务请求 / 冷却 / 定时器。

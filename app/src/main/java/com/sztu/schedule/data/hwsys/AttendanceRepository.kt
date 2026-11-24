@@ -100,7 +100,7 @@ class AttendanceRepository(
             )
         }
         val viewJson = describe(view?.text, schedule?.text, now)
-        val todayJson = describe(schedule?.text, schedule?.text, now, includeRows = false)
+        val todayJson = describe(schedule?.text, schedule?.text, now, rowLimit = 1)
         return JSONObject()
             .put("scheduleTerm", schedule?.text ?: "")
             .put("viewTerm", view?.text ?: "")
@@ -162,7 +162,7 @@ class AttendanceRepository(
         outcome
     }
 
-    private fun describe(termId: String?, scheduleTermId: String?, now: Instant, includeRows: Boolean = true): JSONObject {
+    private fun describe(termId: String?, scheduleTermId: String?, now: Instant, rowLimit: Int = Int.MAX_VALUE): JSONObject {
         val account = session.accountHash().orEmpty()
         val range = if (termId != null) storedRange(account, termId) ?: parseTerm(termId)?.let { suggested(it) } else null
         val cache = if (termId != null && account.isNotBlank()) readCache(account, termId) else null
@@ -182,7 +182,7 @@ class AttendanceRepository(
             displayConfirmed = range?.confirmed == true,
             displaySource = range?.source.orEmpty(),
         )
-        return viewToJson(view, includeRows)
+        return viewToJson(view, rowLimit)
     }
 
     private fun suggested(term: TermId): StoredRange {

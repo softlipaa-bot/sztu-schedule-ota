@@ -20,6 +20,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.isVisible
+import com.sztu.schedule.data.CookieJar
 import com.sztu.schedule.data.JwxtUrls
 import com.sztu.schedule.data.ScheduleRepository
 
@@ -81,7 +82,7 @@ class LoginActivity : ComponentActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 CookieManager.getInstance().flush()
-                maybeFinish(url.orEmpty())
+                if (url != null && view?.url == url) maybeFinish(url)
             }
         }
         webView.loadUrl(JwxtUrls.SSO)
@@ -103,17 +104,13 @@ class LoginActivity : ComponentActivity() {
 
     private fun maybeFinish(url: String) {
         if (finished) return
-        if (!url.contains("jwxt.sztu.edu.cn")) return
-        if (url.contains("LoginToXk", ignoreCase = true)) return
-        if (url.contains("auth.sztu.edu.cn")) return
-        val okPath = url.contains("jsxsd") || url.contains("xsMain") ||
-            url.contains("framework") || url.contains("xskb")
-        if (!okPath) return
+        if (CookieJar.hostOf(url) != CookieJar.HOST_JWXT || JwxtUrls.isSignInPage(url)) return
+        if (!CookieJar.pathOf(url).startsWith("/jsxsd/")) return
 
         CookieManager.getInstance().flush()
         repo.persistWebViewCookies()
         val cookie = repo.savedCookieHeader()
-        if (!cookie.contains("JSESSIONID", ignoreCase = true)) return
+        if (!CookieJar.hasSessionId(cookie)) return
 
         finished = true
         // 稍留一点时间让 Cookie flush 落盘

@@ -1,6 +1,6 @@
 # SZTU教务 / 深技大课表
 
-当前公开源码版本：**2.2.1**。源码位于本仓库，安装包见 [Releases](https://github.com/softlipaa-bot/sztu-schedule-ota/releases)。
+当前公开源码版本：**2.3.2**。源码位于本仓库，安装包见 [Releases](https://github.com/softlipaa-bot/sztu-schedule-ota/releases)。
 
 ## 构建
 
@@ -10,18 +10,20 @@
 
 源码来自当前本地工作目录。个人账号数据、签名私钥、本机 SDK 路径、依赖缓存和历史安装包不随源码上传。第三方依赖遵循各自许可证。
 
-本次 Android 安装包是已签名的 Debug 构建，并非 Release 构建。
+本次 Android 安装包为 Release 构建，沿用已发布版本的签名证书。
 
 ## 许可证
 
-原创项目代码采用 [MIT License](LICENSE)。第三方代码、依赖及素材的原有权利和许可证继续适用。
+原创项目代码采用 [MIT License](LICENSE)。第三方代码、依赖及素材的原有权利和许可证继续适用。对分易移植来源见 [第三方声明](third_party/duifene_auto_sign.NOTICE)。
 
 ## 原项目说明
 
 # 深技大课表（SZTU教务）
 
 单页课表 App（官方 SSO 登录 → 网页爬取课表）。
-当前版本 **2.2.1（versionCode 67）**，UI 为 FlClash 风格的柔和卡片界面。
+当前版本 **2.3.2（versionCode 70）**，UI 为 FlClash 风格的柔和卡片界面。
+
+2.3.2 修复教务登录失效后的同步超时。首页显示最近一次出勤，查询按钮在有结果时仍可使用，全部记录每页显示 10 条并可滚动。
 
 2.2.1 修正出勤同步跑在主线程上、从而显示「获取失败」的问题。从出勤页同步时先登录教学辅助系统；教务和出勤一边失败不会清掉另一边。学期起止日期在你确认之前会标成待确认。
 

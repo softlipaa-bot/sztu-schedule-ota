@@ -6,7 +6,7 @@
 覆盖范围
   1. 主题：顶部按钮每次点击都立即浅↔深切换；选择持久化；外观页选中态与真实模式一致；
      跟随系统只在 system 模式生效；刷新后保持。
-  2. 导航：今日 / 课表 / 出勤 三个入口（无对分易考勤），隐藏面板 inert + aria-hidden（不可键盘访问）。
+  2. 导航：今日 / 课表 / 出勤 / 对分易 四个入口。首页不含对分易内容。隐藏面板 inert + aria-hidden。
   3. 主卡状态语义：08:29 → 下一节、08:30 → 正在上课、09:55 整点 → 今日课程已结束。
   4. 动效：减少动画偏好下装饰动画关闭；页面隐藏时装饰动画暂停（不新增定时器）。
   5. 设置页：登录与同步 / 外观 / 选择背景 / 教学楼地图 / 校历起点 / 关于 全部可达。
@@ -26,7 +26,7 @@ import threading
 from urllib.parse import unquote, urlsplit
 from zipfile import ZipFile
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import expect, sync_playwright
 
 CST = timezone(timedelta(hours=8))
 
@@ -285,18 +285,20 @@ def main():
                     finally:
                         page.close()
 
-                    # ---------- 2) 导航：三个入口、无对分易、隐藏面板不可聚焦 ----------
+                    # ---------- 2) 导航：四个入口，首页不含对分易内容，隐藏面板不可聚焦 ----------
                     page, _ = boot(browser, origin)
                     try:
                         tabs = page.locator("nav.dock .dock-tab")
-                        check(tabs.count() == 3, f"Dock 应为 3 个入口，实际 {tabs.count()}")
+                        check(tabs.count() == 4, f"Dock 应为 4 个入口，实际 {tabs.count()}")
                         labels = [tabs.nth(i).inner_text().strip() for i in range(tabs.count())]
-                        check(labels == ["今日", "课表", "出勤"], f"Dock 标签异常：{labels}")
-                        body_text = page.locator(".app-shell").inner_text()
-                        check("考勤" not in body_text, "界面仍然出现「考勤」")
+                        check(labels == ["今日", "课表", "出勤", "对分易"], f"Dock 标签异常：{labels}")
+                        today_text = page.locator(".today-pane").inner_text()
+                        check("对分易" not in today_text, "首页出现了对分易内容")
+                        check("登录对分易" not in today_text and "开始监听" not in today_text, "首页出现对分易操作")
+                        check("考勤" not in page.locator(".app-shell").inner_text(), "界面仍然出现「考勤」")
                         check(
                             page.evaluate("() => typeof window.DuifeneBridge === 'undefined'"),
-                            "仍存在 DuifeneBridge 原生桥",
+                            "浏览器验收页不应自带原生 DuifeneBridge",
                         )
                         hidden = page.evaluate(
                             """() => {
@@ -325,6 +327,84 @@ def main():
                         shot(page, "nav-schedule")
                     except Exception as error:
                         failures.append(f"nav: {error}")
+                    finally:
+                        page.close()
+
+                    # ---------- 出勤：查询有缺勤后仍可查询，首页显示时间最新的记录 ----------
+                    schedule = snapshot(syncButtonLabel="同步数据")
+                    page, errors = boot(browser, origin, snap=schedule)
+                    try:
+                        latest = {
+                            "id": "latest", "title": "最近签到课程", "date": "2026-10-24",
+                            "time": "08:30–09:55", "status": "已签", "kind": "settled",
+                        }
+                        absence = {
+                            **latest, "id": "absent", "title": "较早缺勤课程", "date": "2026-10-23",
+                            "status": "未签", "kind": "confirmed_absence",
+                        }
+                        records = [latest, absence] + [
+                            {**latest, "id": f"record-{index}", "title": f"出勤记录 {index}"}
+                            for index in range(3, 24)
+                        ]
+                        page.evaluate("""() => {
+                            window.__attendanceQueries = [];
+                            window.ScheduleBridge.syncData = origin => window.__attendanceQueries.push(origin);
+                        }""")
+                        page.get_by_role("button", name="出勤", exact=True).click()
+                        attendance_pane = page.locator(".tab-pane-host.active .attendance-pane")
+                        query = attendance_pane.get_by_role("button", name="同步数据", exact=True)
+                        query.click()
+                        view = {"phase": "ready", "queryComplete": True, "confirmedAbsences": 1}
+                        page.evaluate("""state => window.onAttendanceState(JSON.stringify(state))""", {
+                            "scheduleTerm": schedule["term"], "viewTerm": schedule["term"],
+                            "loggedIn": True, "terms": [{"id": schedule["term"]}],
+                            "today": {**view, "rows": [latest]},
+                            "view": {**view, "rows": records},
+                        })
+                        expect(attendance_pane.locator(".att-card")).to_contain_text(absence["title"])
+                        expect(query).to_be_enabled()
+                        query.click()
+                        check(page.evaluate("window.__attendanceQueries") == ["attendance", "attendance"],
+                              "有缺勤时没有触发再次查询")
+
+                        page.get_by_role("button", name="今日", exact=True).click()
+                        summary = page.locator(".att-summary")
+                        expect(summary).to_contain_text(latest["title"])
+                        expect(summary).to_contain_text(latest["date"])
+                        expect(summary).to_contain_text(latest["time"])
+                        expect(summary).to_contain_text(latest["status"])
+                        expect(summary).not_to_contain_text("缺勤")
+                        summary.click()
+                        expect(attendance_pane.locator(".att-card").first).to_contain_text(latest["title"])
+                        expect(query).to_be_visible()
+                        record_list = attendance_pane.get_by_role("region", name="本页出勤记录")
+                        cards = record_list.locator(".att-card")
+                        pager = attendance_pane.get_by_role("group", name="出勤记录分页")
+                        previous = pager.get_by_role("button", name="上一页")
+                        next_page = pager.get_by_role("button", name="下一页")
+                        expect(cards).to_have_count(10)
+                        expect(previous).to_be_disabled()
+                        scroll_top = record_list.evaluate("(el) => { el.scrollTop = el.scrollHeight; return el.scrollTop; }")
+                        check(scroll_top > 0, "全部记录列表无法滚动")
+                        next_page.click()
+                        expect(cards).to_have_count(10)
+                        expect(cards.first).to_contain_text("出勤记录 11")
+                        check(record_list.evaluate("(el) => el.scrollTop") == 0, "翻页没有回到列表顶部")
+                        next_page.click()
+                        expect(cards).to_have_count(3)
+                        expect(cards.last).to_contain_text("出勤记录 23")
+                        expect(next_page).to_be_disabled()
+                        previous.click()
+                        expect(cards.first).to_contain_text("出勤记录 11")
+                        attendance_pane.get_by_role("button", name="缺勤", exact=True).click()
+                        expect(pager).to_have_count(0)
+                        expect(attendance_pane.locator(".att-card")).to_have_count(1)
+                        attendance_pane.get_by_role("button", name="全部记录", exact=True).click()
+                        expect(cards.first).to_contain_text(latest["title"])
+                        expect(previous).to_be_disabled()
+                        check(not errors, f"出勤页面报错：{errors}")
+                    except Exception as error:
+                        failures.append(f"attendance: {error}")
                     finally:
                         page.close()
 
@@ -538,6 +618,8 @@ def main():
                     try:
                         check(page.locator("nav.side-nav").count() == 1, "宽屏没有侧栏")
                         check(page.locator("nav.dock").count() == 0, "宽屏仍渲染了移动 Dock")
+                        side_labels = [page.locator("nav.side-nav .side-item").nth(i).inner_text().strip() for i in range(4)]
+                        check(side_labels == ["今日", "课表", "出勤", "对分易"], f"宽屏侧栏标签异常：{side_labels}")
                         geo = page.evaluate(
                             """() => {
                                 const hero = document.querySelector('.hero').getBoundingClientRect();
@@ -597,7 +679,7 @@ def main():
     if failures:
         raise SystemExit(1)
     print(
-        "PASS: 主题点击/持久化/跟随系统、3 入口导航与隐藏面板 inert、主卡 08:29-09:55 边界、"
+        "PASS: 主题点击/持久化/跟随系统、4 入口导航与隐藏面板 inert、首页最近出勤与重复查询、主卡 08:29-09:55 边界、"
         "周次待核对语义、减少动画与后台暂停、全部设置页、宽屏对齐与裁剪均通过。"
     )
 

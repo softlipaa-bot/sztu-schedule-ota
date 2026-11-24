@@ -75,6 +75,24 @@ class AttendanceLogicTest {
     }
 
     @Test
+    fun home_row_is_the_latest_record_even_if_an_older_record_is_absent() {
+        val body = cache(
+            records = listOf(
+                raw("older", "示例课甲", "2026-11-07 08:30:00", "2026-11-07 09:55:00", 0),
+                raw("latest", "示例课乙", "2026-11-08 08:30:00", "2026-11-08 09:55:00", 10),
+            ),
+            complete = true,
+            confirmed = true,
+        )
+        val view = viewOf(body, isScheduleTerm = true)
+        val homeRows = viewToJson(view, rowLimit = 1).getJSONArray("rows")
+        assertEquals(1, homeRows.length())
+        assertEquals("latest", homeRows.getJSONObject(0).getString("id"))
+        assertEquals("已签", homeRows.getJSONObject(0).getString("status"))
+        assertEquals(2, viewToJson(view).getJSONArray("rows").length())
+    }
+
+    @Test
     fun duplicate_id_does_not_merge_by_name() {
         val batch = classifyBatch(
             listOf(

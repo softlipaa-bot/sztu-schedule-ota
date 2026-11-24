@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import campusMapUrl from "@/assets/campus-map.jpg";
+import DuifenePane from "@/components/DuifenePane.vue";
+import { blankDuifene, parseDuifene, type DuifeneState } from "@/lib/duifene";
 import {
   getResolvedTheme,
   getThemeMode,
@@ -124,6 +126,18 @@ declare global {
       setAttendanceTerm?: (termId: string) => string;
       confirmAttendanceRange?: (termId: string, start: string, end: string) => string;
     };
+    DuifeneBridge?: {
+      getState: () => string;
+      login: (account: string, password: string, savePassword: boolean) => void;
+      logout: () => void;
+      refreshCourses: () => void;
+      selectCourse: (courseId: string, classId: string) => string;
+      startWatch: () => void;
+      stopWatch: () => void;
+      supplyWebPassword: (password: string, savePassword: boolean) => void;
+      clearRecords?: () => string;
+    };
+    onDuifeneState?: (json: string) => void;
     onScheduleState?: (json: string) => void;
     onScheduleMessage?: (msg: string) => void;
     onOtaState?: (json: string) => void;
@@ -171,9 +185,9 @@ const SECTION_TIMES: Record<number, [string, string]> = {
   14: ["21:40", "21:50"],
 };
 
-/** 2026-11-09 授权新增「出勤」。对分易考勤仍然不要恢复。 */
-type TabId = "today" | "schedule" | "attendance";
-const TAB_ORDER: Record<TabId, number> = { today: 0, schedule: 1, attendance: 2 };
+/** 2026-11-11 授权新增独立「对分易」。出勤仍是教学辅助系统，两者不共用账号。 */
+type TabId = "today" | "schedule" | "attendance" | "duifene";
+const TAB_ORDER: Record<TabId, number> = { today: 0, schedule: 1, attendance: 2, duifene: 3 };
 
 function blankAttendance(headline = "未同步"): AttendanceView {
   return {
@@ -227,8 +241,47 @@ const attendance = ref<AttendanceState>({
   today: blankAttendance(),
   syncDetail: "",
 });
+const duifene = ref<DuifeneState>(blankDuifene());
+function applyDuifene(raw?: string | null) {
+  duifene.value = parseDuifene(raw);
+}
+function refreshDuifene() {
+  applyDuifene(window.DuifeneBridge?.getState?.());
+}
+function duifeneLogin(account: string, password: string, save: boolean) {
+  window.DuifeneBridge?.login?.(account, password, save);
+}
+function duifeneWebPassword(password: string, save: boolean) {
+  window.DuifeneBridge?.supplyWebPassword?.(password, save);
+}
+function duifeneSelect(courseId: string, classId: string): string {
+  const error = window.DuifeneBridge?.selectCourse?.(courseId, classId) || "";
+  refreshDuifene();
+  return error;
+}
+function duifeneClearRecords(): string {
+  const error = window.DuifeneBridge?.clearRecords?.() || "";
+  refreshDuifene();
+  return error;
+}
+function duifeneLogout() {
+  window.DuifeneBridge?.logout?.();
+}
+function duifeneRefreshCourses() {
+  window.DuifeneBridge?.refreshCourses?.();
+}
+function duifeneStart() {
+  window.DuifeneBridge?.startWatch?.();
+}
+function duifeneStop() {
+  window.DuifeneBridge?.stopWatch?.();
+}
+
 const absenceOnly = ref(true);
 const openAttendanceId = ref("");
+const ATTENDANCE_PAGE_SIZE = 10;
+const attendancePage = ref(1);
+const attendanceList = ref<HTMLElement | null>(null);
 const rangeStartInput = ref("");
 const rangeEndInput = ref("");
 
@@ -1520,11 +1573,11 @@ function openScheduleAttendance() {
   if (term && window.ScheduleBridge?.setAttendanceTerm) {
     applyAttendance(window.ScheduleBridge.setAttendanceTerm(term));
   }
+  absenceOnly.value = false;
   switchTab("attendance");
 }
 function onPickAttendanceTerm(event: Event) {
   const term = (event.target as HTMLSelectElement).value;
-  openAttendanceId.value = "";
   if (window.ScheduleBridge?.setAttendanceTerm) applyAttendance(window.ScheduleBridge.setAttendanceTerm(term));
 }
 function confirmAttendanceRange() {
@@ -1532,10 +1585,34 @@ function confirmAttendanceRange() {
   if (!term || !window.ScheduleBridge?.confirmAttendanceRange) return;
   applyAttendance(window.ScheduleBridge.confirmAttendanceRange(term, rangeStartInput.value, rangeEndInput.value));
 }
+const attendanceRows = computed(() => attendance.value.view.rows || []);
+const attendancePageCount = computed(() =>
+  Math.max(1, Math.ceil(attendanceRows.value.length / ATTENDANCE_PAGE_SIZE))
+);
 const visibleAttendance = computed(() => {
-  const rows = attendance.value.view?.rows || [];
-  return absenceOnly.value ? rows.filter((row) => row.kind === "confirmed_absence") : rows;
+  if (absenceOnly.value) return attendanceRows.value.filter((row) => row.kind === "confirmed_absence");
+  const start = (attendancePage.value - 1) * ATTENDANCE_PAGE_SIZE;
+  return attendanceRows.value.slice(start, start + ATTENDANCE_PAGE_SIZE);
 });
+
+function resetAttendanceListPosition() {
+  openAttendanceId.value = "";
+  if (attendanceList.value) attendanceList.value.scrollTop = 0;
+}
+
+watch(
+  [absenceOnly, () => attendance.value.viewTerm, () => attendance.value.view.fetchedAt],
+  () => {
+    attendancePage.value = 1;
+    resetAttendanceListPosition();
+  }
+);
+watch(attendancePageCount, (count) => {
+  attendancePage.value = Math.min(attendancePage.value, count);
+});
+watch(attendancePage, resetAttendanceListPosition);
+
+const latestAttendance = computed(() => attendance.value.today.rows?.[0]);
 function pickBg() {
   window.ScheduleBridge?.pickBackground();
 }
@@ -1596,6 +1673,7 @@ function fmtDate(d: Date) {
 }
 
 function handleAndroidBack(): boolean {
+  if (window.__duifeneConsumeBack?.()) return true;
   if (selected.value) {
     closeCourse();
     return true;
@@ -1608,7 +1686,7 @@ function handleAndroidBack(): boolean {
     closeSettingsMenu();
     return true;
   }
-  if (tab.value === "schedule" || tab.value === "attendance") {
+  if (tab.value === "schedule" || tab.value === "attendance" || tab.value === "duifene") {
     switchTab("today");
     return true;
   }
@@ -1644,6 +1722,8 @@ onMounted(() => {
   themeUnsub = onThemeChange(() => syncThemeState());
 
   window.__handleAndroidBack = handleAndroidBack;
+  window.onDuifeneState = applyDuifene;
+  refreshDuifene();
   const raw = window.ScheduleBridge?.getState?.();
   if (raw) applyState(raw);
   applyAttendance(window.ScheduleBridge?.getAttendanceState?.());
@@ -1710,6 +1790,9 @@ onBeforeUnmount(() => {
   }
   if (window.onAttendanceState === applyAttendance) {
     delete window.onAttendanceState;
+  }
+  if (window.onDuifeneState === applyDuifene) {
+    delete window.onDuifeneState;
   }
 });
 </script>
@@ -1788,6 +1871,22 @@ onBeforeUnmount(() => {
           <span>出勤</span>
         </button>
 
+        <button
+          type="button"
+          class="side-item"
+          :class="{ active: tab === 'duifene' }"
+          :aria-current="tab === 'duifene' ? 'page' : undefined"
+          @click="switchTab('duifene')"
+        >
+          <span class="ico" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="8.2" />
+              <path d="M8.2 12.2l2.4 2.4 5.2-5.4" />
+            </svg>
+          </span>
+          <span>对分易</span>
+        </button>
+
         <p class="side-foot">
           {{ sessionLabel }}<br />
           上次同步 {{ syncedText }}
@@ -1798,7 +1897,7 @@ onBeforeUnmount(() => {
         <header class="top-bar">
           <div class="head-left">
             <p class="head-date num">
-              {{ tab === "today" ? todayHeader.date : tab === "attendance" ? "出勤记录" : monthLabel }}
+              {{ tab === "today" ? todayHeader.date : tab === "attendance" ? "出勤记录" : tab === "duifene" ? "对分易" : monthLabel }}
             </p>
             <p class="head-sub">
               <template v-if="tab === 'today'">
@@ -1807,6 +1906,7 @@ onBeforeUnmount(() => {
               <template v-else-if="tab === 'attendance'">
                 {{ attendance.viewTerm || snap.term || "学期未对应" }}
               </template>
+              <template v-else-if="tab === 'duifene'">课程签到</template>
               <template v-else>{{ snap.term || "未同步学期" }}</template>
             </p>
           </div>
@@ -1930,15 +2030,17 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
 
-                <button type="button" class="att-summary" :class="{ 'is-alert': (attendance.today.confirmedAbsences || 0) > 0 }" @click="openScheduleAttendance">
+                <button type="button" class="att-summary" :class="{ 'is-alert': latestAttendance?.kind === 'confirmed_absence' }" @click="openScheduleAttendance">
                   <span class="att-summary-copy">
-                    <span class="att-summary-kicker">本学期出勤</span>
+                    <span class="att-summary-kicker">最近一次出勤</span>
                     <strong class="att-summary-title">
-                      <template v-if="(attendance.today.confirmedAbsences || 0) > 0">已确认缺勤 {{ attendance.today.confirmedAbsences }}次</template>
-                      <template v-else>{{ attendance.today.headline || "未同步" }}</template>
+                      {{ latestAttendance?.title || (attendance.today.queryComplete ? "暂无出勤记录" : attendance.today.headline || "未同步") }}
                     </strong>
-                    <span class="att-summary-meta">{{ attendance.scheduleTerm || snap.term || "学期未同步" }}</span>
-                    <span v-if="(attendance.today.pendingCount || 0) > 0" class="att-summary-pending">待确认 {{ attendance.today.pendingCount }} 条</span>
+                    <span v-if="latestAttendance" class="att-summary-meta">{{ latestAttendance.date }} · {{ latestAttendance.time }}</span>
+                    <span v-else class="att-summary-meta">{{ attendance.scheduleTerm || snap.term || "学期未同步" }}</span>
+                  </span>
+                  <span v-if="latestAttendance" class="cc-tag" :class="{ 'cc-tag-warn': latestAttendance.kind === 'pending' || latestAttendance.kind === 'unknown', 'cc-tag-alert': latestAttendance.kind === 'confirmed_absence' }">
+                    {{ latestAttendance.kind === "confirmed_absence" ? "缺勤" : latestAttendance.status }}
                   </span>
                   <span class="att-summary-go" aria-hidden="true">›</span>
                 </button>
@@ -2153,6 +2255,10 @@ onBeforeUnmount(() => {
                   <button type="button" class="btn btn-soft" @click="confirmAttendanceRange">确认此范围</button>
                 </div>
                 <p v-if="!attendance.view.rangeConfirmed" class="att-flag">学期日期范围待确认</p>
+                <button type="button" class="btn btn-primary" :disabled="syncing" @click="syncData('attendance')">
+                  {{ syncing ? "同步中…" : snap.syncButtonLabel || (attendance.loggedIn ? "查询出勤" : "登录并同步") }}
+                </button>
+                <p v-if="syncing" class="att-range" role="status">{{ snap.syncStage || message || "正在同步出勤" }}</p>
               </div>
 
               <div class="att-summary-block">
@@ -2168,7 +2274,21 @@ onBeforeUnmount(() => {
                 <button type="button" class="seg-btn" :class="{ active: !absenceOnly }" :aria-pressed="!absenceOnly" @click="absenceOnly = false">全部记录</button>
               </div>
 
-              <div v-if="visibleAttendance.length" class="course-list">
+              <div v-if="!absenceOnly && attendancePageCount > 1" class="att-pager" role="group" aria-label="出勤记录分页">
+                <button type="button" class="btn btn-soft" :disabled="attendancePage === 1" @click="attendancePage--">上一页</button>
+                <span class="att-page-count" role="status">第 {{ attendancePage }} / {{ attendancePageCount }} 页</span>
+                <button type="button" class="btn btn-soft" :disabled="attendancePage === attendancePageCount" @click="attendancePage++">下一页</button>
+              </div>
+
+              <div
+                v-if="visibleAttendance.length"
+                ref="attendanceList"
+                class="course-list"
+                :class="{ 'att-paged-list': !absenceOnly }"
+                :tabindex="absenceOnly ? undefined : 0"
+                :role="absenceOnly ? undefined : 'region'"
+                :aria-label="absenceOnly ? undefined : '本页出勤记录'"
+              >
                 <button
                   v-for="row in visibleAttendance"
                   :key="row.id"
@@ -2187,15 +2307,35 @@ onBeforeUnmount(() => {
                   </span>
                 </button>
               </div>
-              <div v-else class="state-card att-empty">
-                <p class="state-title">{{ attendance.view.listEmpty || attendance.view.headline || "未同步" }}</p>
+              <div v-else class="state-card">
+                <p class="state-title">
+                  {{ !absenceOnly && attendance.view.queryComplete ? "暂无出勤记录" : attendance.view.listEmpty || attendance.view.headline || "未同步" }}
+                </p>
                 <p class="state-desc">{{ attendance.view.note || "同步之后才会出现记录" }}</p>
-                <p v-if="syncing" class="att-range">{{ snap.syncStage || message || "正在同步出勤" }}</p>
-                <button type="button" class="btn btn-primary" :disabled="syncing" @click="syncData('attendance')">
-                  {{ snap.syncButtonLabel || (snap.loggedIn ? "同步数据" : "登录并同步") }}
-                </button>
               </div>
             </section>
+          </div>
+
+          <div
+            class="tab-pane-host"
+            :class="{ active: tab === 'duifene' }"
+            :style="{ transform: paneTransform('duifene') }"
+            :aria-hidden="tab !== 'duifene'"
+            :inert="tab !== 'duifene'"
+          >
+            <DuifenePane
+              :state="duifene"
+              :active="tab === 'duifene'"
+              @login="duifeneLogin"
+              @logout="duifeneLogout"
+              @refresh-courses="duifeneRefreshCourses"
+              :choose-course="duifeneSelect"
+              @select="duifeneSelect"
+              @clear-records="duifeneClearRecords"
+              @start="duifeneStart"
+              @stop="duifeneStop"
+              @web-password="duifeneWebPassword"
+            />
           </div>
         </div>
 
@@ -2253,6 +2393,21 @@ onBeforeUnmount(() => {
               </svg>
             </span>
             <span>出勤</span>
+          </button>
+          <button
+            type="button"
+            class="dock-tab"
+            :class="{ active: tab === 'duifene' }"
+            :aria-current="tab === 'duifene' ? 'page' : undefined"
+            @click="switchTab('duifene')"
+          >
+            <span class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="8.2" />
+                <path d="M8.2 12.2l2.4 2.4 5.2-5.4" />
+              </svg>
+            </span>
+            <span>对分易</span>
           </button>
         </nav>
       </div>

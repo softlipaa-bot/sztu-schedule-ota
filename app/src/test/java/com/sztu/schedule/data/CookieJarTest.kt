@@ -128,6 +128,25 @@ class CookieJarTest {
         assertFalse(ScheduleRepository.looksLikeTimetablePage(""))
     }
 
+    @Test
+    fun expired_session_redirects_are_recognized_by_host_and_path() {
+        assertTrue(JwxtUrls.isSignInPage("https://auth.sztu.edu.cn:443/idp/AuthnEngine"))
+        assertTrue(JwxtUrls.isSignInPage("http://jwxt.sztu.edu.cn/Logon.do?redirect=home"))
+        assertTrue(JwxtUrls.isSignInPage("https://jwxt.sztu.edu.cn/jsxsd/LoginToXk"))
+        assertFalse(JwxtUrls.isSignInPage(JwxtUrls.SCHEDULE))
+        assertFalse(JwxtUrls.isSignInPage("https://example.com/?next=https://auth.sztu.edu.cn/idp/AuthnEngine"))
+    }
+
+    @Test
+    fun schedule_link_on_login_page_is_not_a_timetable() {
+        val html = """
+            <a href="/jsxsd/xskb/xskb_list.do">学期理论课表</a>
+            <form><input name="userAccount"><input type="password"></form>
+        """.trimIndent()
+        assertTrue(ScheduleRepository.looksLikeLoginPage(html))
+        assertFalse(ScheduleRepository.looksLikeTimetablePage(html))
+    }
+
     // ---- R07（复核报告）：同域不同 path 的同名 Cookie 不能取错 ----
 
     @Test

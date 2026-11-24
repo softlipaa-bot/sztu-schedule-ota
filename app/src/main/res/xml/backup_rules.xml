@@ -8,6 +8,7 @@
     <exclude domain="sharedpref" path="sztu_calendar.xml" />
     <exclude domain="sharedpref" path="sztu_hwsys.xml" />
     <exclude domain="sharedpref" path="sztu_hwsys_attendance.xml" />
+    <exclude domain="sharedpref" path="sztu_duifene.xml" />
     <exclude domain="file" path="hwsys_attendance" />
     <exclude domain="file" path="duifenyi.ini" />
     <exclude domain="file" path="schedule.json" />

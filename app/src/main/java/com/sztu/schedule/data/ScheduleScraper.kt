@@ -2,44 +2,54 @@ package com.sztu.schedule.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Handler
 import android.os.Looper
 import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import kotlinx.coroutines.runBlocking
-import kotlin.concurrent.thread
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import org.json.JSONTokener
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
-/**
- * 后台 WebView 打开课表页并抓 HTML（不展示给用户）。
- */
+/** 在共享登录会话的后台 WebView 中读取课表。 */
 object ScheduleScraper {
+    private const val SESSION_EXPIRED = "会话已过期，请重新登录"
+
+    suspend fun scrape(context: Context): Result<ScheduleSnapshot> {
+        val repo = ScheduleRepository.get(context)
+        return try {
+            val html = readPage(context)
+            if (ScheduleRepository.looksLikeLoginPage(html)) throw SessionExpired()
+            Result.success(repo.saveTimetablePage(html))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SessionExpired) {
+            repo.markSessionExpired()
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
-    fun scrape(
-        context: Context,
-        onDone: (Result<ScheduleSnapshot>) -> Unit,
-    ) {
-        val activityContext = context
-        val repo = ScheduleRepository.get(activityContext)
+    private suspend fun readPage(context: Context): String = withContext(Dispatchers.Main.immediate) {
+        val webView = WebView(context)
         val main = Handler(Looper.getMainLooper())
-
-        main.post {
-            val webView = WebView(activityContext)
-            var done = false
-            fun finishOnce(r: Result<ScheduleSnapshot>) {
-                if (done) return
-                done = true
-                try {
-                    webView.stopLoading()
-                    webView.destroy()
-                } catch (_: Exception) {
-                }
-                onDone(r)
+        try {
+            CookieManager.getInstance().apply {
+                setAcceptCookie(true)
+                setAcceptThirdPartyCookies(webView, true)
             }
-
-            CookieManager.getInstance().setAcceptCookie(true)
             webView.settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -47,74 +57,87 @@ object ScheduleScraper {
                 userAgentString = userAgentString.replace("; wv", "")
             }
 
-            val bridge = object {
-                @JavascriptInterface
-                fun onHtml(html: String?) {
-                    val body = html.orEmpty()
-                    thread {
-                        try {
-                            CookieManager.getInstance().flush()
-                            repo.persistWebViewCookies()
-                            if (body.length < 80 || ScheduleRepository.looksLikeLoginPage(body)) {
-                                val http = runBlocking { repo.refreshFromJwxt() }
-                                main.post { finishOnce(http) }
-                                return@thread
+            withTimeoutOrNull(25_000) {
+                suspendCancellableCoroutine { continuation ->
+                    fun fail(error: Exception) {
+                        if (continuation.isActive) continuation.resumeWithException(error)
+                    }
+
+                    var navigation = 0
+                    var retriedLanding = false
+                    webView.webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                            val url = request.url
+                            // 教务会把过期会话重定向到明文 /Logon.do，直接交回官方登录入口。
+                            if (request.isForMainFrame && url.scheme == "http" && JwxtUrls.isSignInPage(url.toString())) {
+                                fail(SessionExpired())
+                                return true
                             }
-                            val parsed = ScheduleHtmlParser.parse(body)
-                            if (parsed.courses.isEmpty()) {
-                                val http = runBlocking { repo.refreshFromJwxt() }
-                                main.post { finishOnce(http) }
+                            return false
+                        }
+
+                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                            navigation++
+                            main.removeCallbacksAndMessages(null)
+                        }
+
+                        override fun onPageFinished(view: WebView, url: String) {
+                            if (!continuation.isActive || view.url != url) return
+                            main.removeCallbacksAndMessages(null)
+                            val pageNavigation = navigation
+                            main.postDelayed({
+                                if (!continuation.isActive || navigation != pageNavigation || view.url != url) {
+                                    return@postDelayed
+                                }
+                                when {
+                                    JwxtUrls.isSignInPage(url) -> fail(SessionExpired())
+                                    CookieJar.hostOf(url) != CookieJar.HOST_JWXT ->
+                                        fail(IllegalStateException("教务跳转到了非预期页面"))
+                                    !CookieJar.pathOf(url).startsWith("/jsxsd/xskb/") && !retriedLanding -> {
+                                        retriedLanding = true
+                                        view.loadUrl(JwxtUrls.SCHEDULE)
+                                    }
+                                    else -> view.evaluateJavascript("document.documentElement.outerHTML") { value ->
+                                        if (continuation.isActive && navigation == pageNavigation && view.url == url) {
+                                            val html = runCatching { JSONTokener(value).nextValue() as? String }.getOrNull()
+                                            if (html.isNullOrBlank()) {
+                                                fail(IllegalStateException("无法读取教务课表页面"))
+                                            } else {
+                                                continuation.resume(html)
+                                            }
+                                        }
+                                    }
+                                }
+                            }, 900)
+                        }
+
+                        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                            if (!request.isForMainFrame) return
+                            if (JwxtUrls.isSignInPage(request.url.toString()) && request.url.scheme == "http") {
+                                fail(SessionExpired())
                             } else {
-                                repo.save(parsed)
-                                main.post { finishOnce(Result.success(parsed)) }
+                                fail(IllegalStateException("无法连接教务系统（WebView 错误 ${error.errorCode}）"))
                             }
-                        } catch (e: Exception) {
-                            main.post { finishOnce(Result.failure(e)) }
+                        }
+
+                        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                            if (!request.isForMainFrame) return
+                            if (response.statusCode == 401) {
+                                fail(SessionExpired())
+                            } else {
+                                fail(IllegalStateException("教务系统请求失败（HTTP ${response.statusCode}）"))
+                            }
                         }
                     }
+                    webView.loadUrl(JwxtUrls.SCHEDULE)
                 }
-            }
-            webView.addJavascriptInterface(bridge, "SztuCapture")
-
-            var attempts = 0
-            webView.webViewClient = object : WebViewClient() {
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    if (done) return
-                    CookieManager.getInstance().flush()
-                    val u = url.orEmpty()
-                    if (!u.contains("jwxt.sztu.edu.cn")) return
-                    if (u.contains("LoginToXk", ignoreCase = true)) {
-                        finishOnce(Result.failure(IllegalStateException("会话已过期，请重新登录")))
-                        return
-                    }
-                    if (!u.contains("xskb") && attempts < 2) {
-                        attempts++
-                        view?.loadUrl(JwxtUrls.SCHEDULE)
-                        return
-                    }
-                    main.postDelayed({
-                        if (done) return@postDelayed
-                        view?.evaluateJavascript(
-                            """
-                            (function(){
-                              try {
-                                SztuCapture.onHtml(document.documentElement.outerHTML);
-                              } catch(e) { SztuCapture.onHtml(''); }
-                            })();
-                            """.trimIndent(),
-                            null
-                        )
-                    }, 900)
-                }
-            }
-
-            main.postDelayed({
-                if (!done) {
-                    finishOnce(Result.failure(IllegalStateException("同步超时，请重试")))
-                }
-            }, 25000)
-
-            webView.loadUrl(JwxtUrls.SCHEDULE)
+            } ?: throw IllegalStateException("教务课表加载超时，请检查网络后重试")
+        } finally {
+            main.removeCallbacksAndMessages(null)
+            webView.stopLoading()
+            webView.destroy()
         }
     }
+
+    private class SessionExpired : IllegalStateException(SESSION_EXPIRED)
 }

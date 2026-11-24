@@ -681,21 +681,19 @@ fun formatShanghai(epochMs: Long): String {
     return Instant.ofEpochMilli(epochMs).atZone(SHANGHAI).format(DateTimeFormatter.ofPattern("M月d日 HH:mm"))
 }
 
-fun viewToJson(view: BuiltView, includeRows: Boolean): JSONObject {
+fun viewToJson(view: BuiltView, rowLimit: Int = Int.MAX_VALUE): JSONObject {
     val rows = JSONArray()
-    if (includeRows) {
-        view.rows.forEach { row ->
-            rows.put(
-                JSONObject()
-                    .put("id", row.id)
-                    .put("title", row.title)
-                    .put("date", row.date)
-                    .put("time", row.time)
-                    .put("status", row.status)
-                    .put("kind", row.kind)
-                    .put("detail", row.detail)
-            )
-        }
+    view.rows.asSequence().take(rowLimit).forEach { row ->
+        rows.put(
+            JSONObject()
+                .put("id", row.id)
+                .put("title", row.title)
+                .put("date", row.date)
+                .put("time", row.time)
+                .put("status", row.status)
+                .put("kind", row.kind)
+                .put("detail", row.detail)
+        )
     }
     return JSONObject()
         .put("phase", view.phase)
