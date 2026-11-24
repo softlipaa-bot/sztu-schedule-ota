@@ -1,12 +1,12 @@
 {
   "product": "sztu-schedule",
   "package": "com.sztu.schedule",
-  "versionCode": 67,
-  "versionName": "2.2.1",
-  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.2.1/sztu-schedule-latest.apk",
+  "versionCode": 70,
+  "versionName": "2.3.2",
+  "apkUrl": "https://github.com/softlipaa-bot/sztu-schedule-ota/releases/download/v2.3.2/sztu-schedule-latest.apk",
   "force": false,
-  "sizeBytes": 6385179,
-  "sha256": "5d6c97fa255e20501eef0e9109fe8091b269723d952306508141ba3281ee50d9",
+  "sizeBytes": 5638664,
+  "sha256": "de0f7e5d33aa54a45d565325d63369c0af155c554302becb709ba2b2f1cfd587",
   "assetName": "sztu-schedule-latest.apk",
-  "changelog": "2.2.1：同步当前本地源码与最新签名 APK；课表、教学辅助出勤、小组件和外观功能。"
+  "changelog": "修复课表登录失效后的同步超时。首页显示最近一次出勤，查询按钮始终可用，全部记录支持每页 10 条及滚动。"
 }
